@@ -12,8 +12,11 @@ public class OptionNames {
     public static final String VALIDATE = "validate";
     public static final String COVERAGE = "coverage";
     public static final String WITNESS = "witness";
+    public static final String SMTLIB2 = "smtlib2";
+    public static final String CAT_INCLUDE = "cat.include";
 
     // Modeling Options
+    public static final String PROGRESSMODEL = "modeling.progress";
     public static final String THREAD_CREATE_ALWAYS_SUCCEEDS = "modeling.threadCreateAlwaysSucceeds";
     public static final String RECURSION_BOUND = "modeling.recursionBound";
     public static final String MEMORY_IS_ZEROED = "modeling.memoryIsZeroed";
@@ -45,6 +48,7 @@ public class OptionNames {
     public static final String REMOVE_ASSERTION_OF_TYPE = "program.processing.skipAssertionsOfType";
 
     // Program Property Options
+    public static final String REACHING_DEFINITIONS_METHOD = "program.analysis.reachingDefinitions";
     public static final String ALIAS_METHOD = "program.analysis.alias";
     public static final String ALIAS_GRAPHVIZ = "program.analysis.generateAliasGraph";
     public static final String ALIAS_GRAPHVIZ_SPLIT_BY_THREAD = "program.analysis.generateAliasGraph.splitByThread";

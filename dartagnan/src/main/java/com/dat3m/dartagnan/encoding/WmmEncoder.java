@@ -4,9 +4,10 @@ import com.dat3m.dartagnan.GlobalSettings;
 import com.dat3m.dartagnan.configuration.Arch;
 import com.dat3m.dartagnan.expression.Expression;
 import com.dat3m.dartagnan.program.Program;
-import com.dat3m.dartagnan.program.analysis.Dependency;
+import com.dat3m.dartagnan.program.analysis.ReachingDefinitionsAnalysis;
 import com.dat3m.dartagnan.program.event.Event;
 import com.dat3m.dartagnan.program.event.MemoryEvent;
+import com.dat3m.dartagnan.program.event.RegReader;
 import com.dat3m.dartagnan.program.event.RegWriter;
 import com.dat3m.dartagnan.program.event.Tag;
 import com.dat3m.dartagnan.program.event.core.ControlBarrier;
@@ -357,29 +358,6 @@ public class WmmEncoder implements Encoder {
         }
 
         @Override
-        public Void visitFences(Fences fence) {
-            final Relation rel = fence.getDefinedRelation();
-            final Filter fenceSet = fence.getFilter();
-            EventGraph mustSet = ra.getKnowledge(rel).getMustSet();
-            List<Event> fences = program.getThreadEvents().stream().filter(fenceSet::apply).toList();
-            EncodingContext.EdgeEncoder encoder = context.edge(rel);
-            encodeSets.get(rel).apply((e1, e2) -> {
-                BooleanFormula orClause;
-                if (mustSet.contains(e1, e2)) {
-                    orClause = bmgr.makeTrue();
-                } else {
-                    orClause = fences.stream()
-                            .filter(f -> e1.getGlobalId() < f.getGlobalId() && f.getGlobalId() < e2.getGlobalId())
-                            .map(context::execution).reduce(bmgr.makeFalse(), bmgr::or);
-                }
-                enc.add(bmgr.equivalence(
-                        encoder.encode(e1, e2),
-                        bmgr.and(execution(e1, e2), orClause)));
-            });
-            return null;
-        }
-
-        @Override
         public Void visitInternalDataDependency(DirectDataDependency idd) {
             return visitDirectDependency(idd.getDefinedRelation());
         }
@@ -390,16 +368,18 @@ public class WmmEncoder implements Encoder {
         }
 
         private Void visitDirectDependency(Relation r) {
-            Dependency dep = context.getAnalysisContext().get(Dependency.class);
-            EncodingContext.EdgeEncoder edge = context.edge(r);
+            final ReachingDefinitionsAnalysis definitions = context.getAnalysisContext()
+                    .get(ReachingDefinitionsAnalysis.class);
+            final EncodingContext.EdgeEncoder edge = context.edge(r);
             encodeSets.get(r).apply((writer, reader) -> {
-                if (!(writer instanceof RegWriter rw)) {
+                if (!(writer instanceof RegWriter wr) || !(reader instanceof RegReader rr)) {
                     enc.add(bmgr.not(edge.encode(writer, reader)));
                 } else {
-                    Dependency.State s = dep.of(reader, rw.getResultRegister());
-                    if (s.must.contains(writer)) {
+                    final ReachingDefinitionsAnalysis.RegisterWriters state = definitions.getWriters(rr)
+                            .ofRegister(wr.getResultRegister());
+                    if (state.getMustWriters().contains(writer)) {
                         enc.add(bmgr.equivalence(edge.encode(writer, reader), context.execution(writer, reader)));
-                    } else if (!s.may.contains(writer)) {
+                    } else if (!state.getMayWriters().contains(writer)) {
                         enc.add(bmgr.not(edge.encode(writer, reader)));
                     }
                 }
