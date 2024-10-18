@@ -50,6 +50,7 @@ import static com.dat3m.dartagnan.program.event.FenceNameRepository.*;
 public class EventFactory {
 
     private static final ExpressionFactory expressions = ExpressionFactory.getInstance();
+    private static final TypeFactory types = TypeFactory.getInstance();
 
     // Static class
     private EventFactory() {
@@ -93,7 +94,15 @@ public class EventFactory {
 
     public static Alloc newAlloc(Register register, Type allocType, Expression arraySize,
                                  boolean isHeapAlloc, boolean doesZeroOutMemory) {
-        return new Alloc(register, allocType, arraySize, isHeapAlloc, doesZeroOutMemory);
+        final Expression defaultAlignment = expressions.makeValue(8, types.getArchType());
+        return newAlignedAlloc(register, allocType, arraySize, defaultAlignment, isHeapAlloc, doesZeroOutMemory);
+    }
+
+    public static Alloc newAlignedAlloc(Register register, Type allocType, Expression arraySize, Expression alignment,
+                                 boolean isHeapAlloc, boolean doesZeroOutMemory) {
+        arraySize = expressions.makeCast(arraySize, types.getArchType(), false);
+        alignment = expressions.makeCast(alignment, types.getArchType(), false);
+        return new Alloc(register, allocType, arraySize, alignment, isHeapAlloc, doesZeroOutMemory);
     }
 
     public static Load newLoad(Register register, Expression address) {
@@ -136,6 +145,13 @@ public class EventFactory {
         final Expression address = offset == 0 ? base :
                 expressions.makeAdd(base, expressions.makeValue(offset, (IntegerType) base.getType()));
         return new Init(base, offset, address);
+    }
+
+    public static Init newC11Init(MemoryObject base, int offset) {
+        Init init = newInit(base, offset);
+        init.addTags(base.getFeatureTags());
+        init.addTags(Tag.C11.NONATOMIC);
+        return init;
     }
 
     public static ValueFunctionCall newValueFunctionCall(Register resultRegister, Function function, List<Expression> arguments) {
@@ -319,7 +335,7 @@ public class EventFactory {
 
         public static InitLock newInitLock(String name, Expression address, Expression ignoreAttributes) {
             //TODO store attributes inside mutex object
-            return new InitLock(name, address, expressions.makeZero(TypeFactory.getInstance().getArchType()));
+            return new InitLock(name, address, expressions.makeZero(types.getArchType()));
         }
 
         public static Lock newLock(String name, Expression address) {
@@ -801,5 +817,4 @@ public class EventFactory {
             return new SpirvRmwExtremum(register, address, op, value, scope, tags);
         }
     }
-
 }
