@@ -142,6 +142,10 @@ public class ExecutionModelManager {
             em = new LocalModel(local, tm, id, value);
         } else if (e instanceof CondJump cj) {
             em = new CondJumpModel(cj, tm, id);
+        } else if (e instanceof MemAlloc alloc) {
+            em = new AllocModel(alloc, tm, id);
+        } else if (e instanceof MemFree free) {
+            em = new MemFreeModel(free, tm, id);
         } else {
             // Should never happen.
             throw new IllegalArgumentException(String.format("Event %s should not be extracted", e));
@@ -157,7 +161,9 @@ public class ExecutionModelManager {
                || e instanceof GenericVisibleEvent
                || e instanceof Local
                || e instanceof Assert
-               || e instanceof CondJump;
+               || e instanceof CondJump
+               || (e instanceof MemAlloc alloc && alloc.isHeapAllocation())
+               || e instanceof MemFree;
     }
 
     private void extractMemoryLayout() {
@@ -215,6 +221,7 @@ public class ExecutionModelManager {
                 // Populate graph of relations unsupported by the visitor using default relation analysis.
                 graphPopulator.populateDynamicDefaultGraph(r);
             }
+            // graphPopulator.populateDynamicDefaultGraph(r);
         }
 
         // Do the computation.
@@ -230,6 +237,7 @@ public class ExecutionModelManager {
         }
 
         for (Relation r : relsToExtract) {
+            System.out.println(r + " : " + relModelCache.get(r).getEdgeModels().size());
             executionModel.addRelation(r, relModelCache.get(r));
         }
     }
@@ -447,56 +455,6 @@ public class ExecutionModelManager {
                     if (em instanceof CondJumpModel cjm) {
                         for (EventModel dep : cjm.getDependentEvents(executionModel)) {
                             rg.add(new Edge(cjm.getId(), dep.getId()));
-                        }
-                    }
-                }
-            }
-            return null;
-        }
-
-        @Override
-        public Void visitAddressDependency(DirectAddressDependency addrDirect) {
-            SimpleGraph rg = (SimpleGraph) relGraphCache.get(addrDirect.getDefinedRelation());
-            for (ThreadModel tm : executionModel.getThreadModels()) {
-                Set<RegWriterModel> writes = new HashSet<>();
-                for (EventModel em : tm.getEventModels()) {
-                    if (em instanceof RegWriterModel rwm) {
-                        writes.add(rwm);
-                        continue;
-                    }
-                    if (em instanceof RegReaderModel rrm) {
-                        for (RegWriterModel write : writes) {
-                            for (Register.Read read : rrm.getRegisterReads()) {
-                                if (read.register() == write.getResultRegister()
-                                    && read.usageType() == Register.UsageType.ADDR) {
-                                    rg.add(new Edge(write.getId(), rrm.getId()));
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            return null;
-        }
-
-        @Override
-        public Void visitInternalDataDependency(DirectDataDependency idd) {
-            SimpleGraph rg = (SimpleGraph) relGraphCache.get(idd.getDefinedRelation());
-            for (ThreadModel tm : executionModel.getThreadModels()) {
-                Set<RegWriterModel> writes = new HashSet<>();
-                for (EventModel em : tm.getEventModels()) {
-                    if (em instanceof RegWriterModel rwm) {
-                        writes.add(rwm);
-                        continue;
-                    }
-                    if (em instanceof RegReaderModel rrm) {
-                        for (RegWriterModel write : writes) {
-                            for (Register.Read read : rrm.getRegisterReads()) {
-                                if (read.register() == write.getResultRegister()
-                                    && read.usageType() == Register.UsageType.DATA) {
-                                    rg.add(new Edge(write.getId(), rrm.getId()));
-                                }
-                            }
                         }
                     }
                 }
