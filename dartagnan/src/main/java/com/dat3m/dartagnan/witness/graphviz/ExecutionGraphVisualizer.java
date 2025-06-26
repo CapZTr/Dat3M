@@ -120,7 +120,9 @@ public class ExecutionGraphVisualizer {
         return e instanceof MemoryEventModel
                 || e instanceof GenericVisibleEventModel
                 || e instanceof LocalModel
-                || e instanceof AssertModel;
+                || e instanceof AssertModel
+                || e instanceof AllocModel
+                || e instanceof MemFreeModel;
     }
 
     private void addEvents(ExecutionModelNext model) {
