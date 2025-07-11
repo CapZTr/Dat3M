@@ -4,6 +4,7 @@ import com.dat3m.dartagnan.expression.integers.IntLiteral;
 import com.dat3m.dartagnan.program.Program;
 import com.dat3m.dartagnan.program.Register;
 import com.dat3m.dartagnan.program.Register.UsageType;
+import com.dat3m.dartagnan.program.ScopeHierarchy;
 import com.dat3m.dartagnan.program.Thread;
 import com.dat3m.dartagnan.program.analysis.BranchEquivalence;
 import com.dat3m.dartagnan.program.analysis.ExecutionAnalysis;
@@ -856,6 +857,46 @@ public class NativeRelationAnalysis implements RelationAnalysis {
         }
 
         @Override
+        public MutableKnowledge visitAllocPtr(AllocPtr allocPtr) {
+            MutableEventGraph may = new MapEventGraph();
+            MutableEventGraph must = new MapEventGraph();
+            List<Event> allocs = program.getThreadEventsWithAllTags(ALLOC);
+            List<MemFree> frees = program.getThreadEvents(MemFree.class);
+            List<? extends Event> allocAndFrees = Stream.concat(allocs.stream(), frees.stream()).toList();
+            for (Event e1 : allocAndFrees) {
+                for (MemFree e2 : frees) {
+                    if (alias.mayAlias(e1, e2)) {
+                        may.add(e1, e2);
+                        if (alias.mustAlias(e1, e2)) {
+                            must.add(e1, e2);
+                        }
+                    }
+                }
+            }
+            return new MutableKnowledge(may, must);
+        }
+
+        @Override
+        public MutableKnowledge visitAllocMem(AllocMem allocMem) {
+            MutableEventGraph may = new MapEventGraph();
+            MutableEventGraph must = new MapEventGraph();
+            List<MemoryCoreEvent> memEvents = program.getThreadEvents(MemoryCoreEvent.class);
+            List<Event> allocs = program.getThreadEventsWithAllTags(ALLOC);
+            for (Event e1 : allocs) {
+                for (MemoryCoreEvent e2 : memEvents) {
+                    if (e2 instanceof Init) { continue; }
+                    if (alias.mayObjectAlias(e1, e2)) {
+                        may.add(e1, e2);
+                        if (alias.mustObjectAlias(e1, e2)) {
+                            must.add(e1, e2);
+                        }
+                    }
+                }
+            }
+            return new MutableKnowledge(may, must);
+        }
+
+        @Override
         public MutableKnowledge visitReadFrom(ReadFrom rf) {
             logger.trace("Computing knowledge about read-from");
             final BranchEquivalence eq = analysisContext.requires(BranchEquivalence.class);
@@ -1062,28 +1103,40 @@ public class NativeRelationAnalysis implements RelationAnalysis {
             List<ControlBarrier> barriers = program.getThreadEvents(ControlBarrier.class).stream()
                     .filter(e -> !(e instanceof NamedBarrier))
                     .toList();
-            barriers.forEach(e1 -> barriers.stream()
-                    .filter(e2 -> e1.getInstanceId().equals(e2.getInstanceId()))
-                    .filter(e2 -> !exec.areMutuallyExclusive(e1, e2))
-                    .filter(e2 -> !e2.hasTag(PTX.ARRIVE))
-                    .forEach(e2 -> must.add(e1, e2)));
+            for (ControlBarrier e1 : barriers) {
+                String id = e1.getInstanceId();
+                String scope = e1.getExecScope();
+                ScopeHierarchy hierarchy = e1.getThread().getScopeHierarchy();
+                barriers.stream()
+                        .filter(e2 -> id.equals(e2.getInstanceId()))
+                        .filter(e2 -> hierarchy.canSyncAtScope(e2.getThread().getScopeHierarchy(), scope))
+                        .filter(e2 -> !exec.areMutuallyExclusive(e1, e2))
+                        .filter(e2 -> !e2.hasTag(PTX.ARRIVE))
+                        .forEach(e2 -> must.add(e1, e2));
+            }
 
             MutableEventGraph may = MapEventGraph.from(must);
             List<NamedBarrier> namedBarriers = program.getThreadEvents(NamedBarrier.class);
-            namedBarriers.forEach(e1 -> namedBarriers.stream()
-                    .filter(e2 -> e1.getInstanceId().equals(e2.getInstanceId()))
-                    .filter(e2 -> !exec.areMutuallyExclusive(e1, e2))
-                    .filter(e2 -> !e2.hasTag(PTX.ARRIVE))
-                    .forEach(e2 -> {
-                        if (e1.getResourceId().equals(e2.getResourceId())) {
-                            may.add(e1, e2);
-                            if (e1.getQuorum() == null) {
-                                must.add(e1, e2);
+            for (NamedBarrier e1 : namedBarriers) {
+                String id = e1.getInstanceId();
+                String scope = e1.getExecScope();
+                ScopeHierarchy hierarchy = e1.getThread().getScopeHierarchy();
+                namedBarriers.stream()
+                        .filter(e2 -> id.equals(e2.getInstanceId()))
+                        .filter(e2 -> hierarchy.canSyncAtScope(e2.getThread().getScopeHierarchy(), scope))
+                        .filter(e2 -> !exec.areMutuallyExclusive(e1, e2))
+                        .filter(e2 -> !e2.hasTag(PTX.ARRIVE))
+                        .forEach(e2 -> {
+                            if (e1.getResourceId().equals(e2.getResourceId())) {
+                                may.add(e1, e2);
+                                if (e1.getQuorum() == null) {
+                                    must.add(e1, e2);
+                                }
+                            } else if (!(e1.getResourceId() instanceof IntLiteral) || !(e2.getResourceId() instanceof IntLiteral)) {
+                                may.add(e1, e2);
                             }
-                        } else if (!(e1.getResourceId() instanceof IntLiteral) || !(e2.getResourceId() instanceof IntLiteral)) {
-                            may.add(e1, e2);
-                        }
-                    }));
+                        });
+            }
             return new MutableKnowledge(may, must);
         }
 
