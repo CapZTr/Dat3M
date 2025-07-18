@@ -268,6 +268,7 @@ public class ExecutionModel {
         List<Integer> threadEndIndexList = new ArrayList<>(threadList.size());
         Map<Thread, List<List<Integer>>> atomicBlockRangesMap = new HashMap<>();
 
+
         for (Thread thread : threadList) {
             initDepTracking();
             List<List<Integer>> atomicBlockRanges = atomicBlockRangesMap.computeIfAbsent(thread, key -> new ArrayList<>());
@@ -461,7 +462,7 @@ public class ExecutionModel {
             } else if (regWriter instanceof RegReader regReader) {
                 // Note: This code might work for more cases than we check for here,
                 // but we want to throw an exception if an unexpected event appears.
-                assert regWriter instanceof Local || regWriter instanceof Alloc;
+                assert regWriter instanceof Local || regWriter instanceof MemAlloc;
                 // ---- internal data dependency ----
                 final Set<EventData> dataDeps = new HashSet<>();
                 for (Register.Read regRead : regReader.getRegisterReads()) {

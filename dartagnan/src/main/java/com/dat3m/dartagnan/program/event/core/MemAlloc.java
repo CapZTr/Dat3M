@@ -9,10 +9,7 @@ import com.dat3m.dartagnan.expression.integers.IntLiteral;
 import com.dat3m.dartagnan.expression.type.IntegerType;
 import com.dat3m.dartagnan.expression.type.TypeFactory;
 import com.dat3m.dartagnan.program.Register;
-import com.dat3m.dartagnan.program.event.AbstractEvent;
-import com.dat3m.dartagnan.program.event.EventVisitor;
-import com.dat3m.dartagnan.program.event.RegReader;
-import com.dat3m.dartagnan.program.event.RegWriter;
+import com.dat3m.dartagnan.program.event.*;
 import com.dat3m.dartagnan.program.memory.MemoryObject;
 import com.google.common.base.Preconditions;
 import org.sosy_lab.java_smt.api.BooleanFormula;
@@ -22,10 +19,10 @@ import java.util.HashSet;
 import java.util.Set;
 
 /*
-    Alloc represents any dynamic allocation performed in the program, i.e., both heap and stack allocations.
+    MemAlloc represents any dynamic allocation performed in the program, i.e., both heap and stack allocations.
     Each allocation has a type and an array size (equals 1 for simple allocations).
  */
-public final class Alloc extends AbstractEvent implements RegReader, RegWriter {
+public final class MemAlloc extends AbstractEvent implements RegReader, RegWriter {
     private Register resultRegister;
     private Type allocationType;
     private Expression arraySize;
@@ -36,7 +33,7 @@ public final class Alloc extends AbstractEvent implements RegReader, RegWriter {
     // This will be set at the end of the program processing.
     private transient MemoryObject allocatedObject;
 
-    public Alloc(Register resultRegister, Type allocType, Expression arraySize, Expression alignment, boolean isHeapAllocation,
+    public MemAlloc(Register resultRegister, Type allocType, Expression arraySize, Expression alignment, boolean isHeapAllocation,
                  boolean doesZeroOutMemory) {
         Preconditions.checkArgument(resultRegister.getType() == TypeFactory.getInstance().getPointerType());
         Preconditions.checkArgument(arraySize.getType() instanceof IntegerType);
@@ -47,18 +44,24 @@ public final class Alloc extends AbstractEvent implements RegReader, RegWriter {
         this.allocationType = allocType;
         this.isHeapAllocation = isHeapAllocation;
         this.doesZeroOutMemory = doesZeroOutMemory;
+        if (isHeapAllocation) {
+            addTags(Tag.VISIBLE, Tag.ALLOC);
+        }
     }
 
-    private Alloc(Alloc other) {
+    private MemAlloc(MemAlloc other) {
         super(other);
         Preconditions.checkState(other.allocatedObject == null,
-                "Cannot copy Alloc events after memory allocation was performed.");
+                "Cannot copy MemAlloc events after memory allocation was performed.");
         this.resultRegister = other.resultRegister;
         this.allocationType = other.allocationType;
         this.arraySize = other.arraySize;
         this.alignment = other.alignment;
         this.isHeapAllocation = other.isHeapAllocation;
         this.doesZeroOutMemory = other.doesZeroOutMemory;
+        if (isHeapAllocation) {
+            addTags(Tag.VISIBLE, Tag.ALLOC);
+        }
     }
 
     @Override
@@ -122,7 +125,7 @@ public final class Alloc extends AbstractEvent implements RegReader, RegWriter {
     }
 
     @Override
-    public Alloc getCopy() { return new Alloc(this); }
+    public MemAlloc getCopy() { return new MemAlloc(this); }
 
     @Override
     public <T> T accept(EventVisitor<T> visitor) {

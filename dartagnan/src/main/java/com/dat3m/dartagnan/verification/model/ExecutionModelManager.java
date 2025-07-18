@@ -136,6 +136,10 @@ public class ExecutionModelManager {
             em = new LocalModel(local, tm, id, value);
         } else if (e instanceof CondJump cj) {
             em = new CondJumpModel(cj, tm, id);
+        } else if (e instanceof MemAlloc alloc) {
+            em = new AllocModel(alloc, tm, id);
+        } else if (e instanceof MemFree free) {
+            em = new MemFreeModel(free, tm, id);
         } else {
             // Should never happen.
             throw new IllegalArgumentException(String.format("Event %s should not be extracted", e));
@@ -151,7 +155,9 @@ public class ExecutionModelManager {
                || e instanceof GenericVisibleEvent
                || e instanceof Local
                || e instanceof Assert
-               || e instanceof CondJump;
+               || e instanceof CondJump
+               || (e instanceof MemAlloc alloc && alloc.isHeapAllocation())
+               || e instanceof MemFree;
     }
 
     private void extractMemoryLayout() {
