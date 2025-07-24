@@ -18,6 +18,10 @@ typedef struct Node {
 _Atomic(Node *) Tail;
 _Atomic(Node *) Head;
 
+#define RETIRE_THRESHOLD 10
+Node* retired[RETIRE_THRESHOLD];
+_Atomic int retired_count = 0;
+
 
 void init() {
 	Node* node = malloc(sizeof (Node));
@@ -72,7 +76,7 @@ int dequeue() {
 				} else {
 					result = next->val;
 					if (CAS(&Head, &head, next)) {
-                        //retire(head);
+						retired[atomic_fetch_add(&retired_count, 1)] = head;
                         break;
                     }
 				}
@@ -81,4 +85,11 @@ int dequeue() {
 	}
 
 	return result;
+}
+
+void free_all_retired() {
+    for (int i = 0; i < retired_count; ++i) {
+        free(retired[i]);
+    }
+    retired_count = 0;
 }

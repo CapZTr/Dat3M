@@ -58,7 +58,7 @@ public class MemToReg implements FunctionProcessor {
     private Matcher analyze(Function function) {
         final var matcher = new Matcher();
         // Initially, all locally-allocated addresses are potentially promotable.
-        for (final Alloc allocation : function.getEvents(Alloc.class)) {
+        for (final MemAlloc allocation : function.getEvents(MemAlloc.class)) {
             // Allocations will usually not have users.  Otherwise, their object is not promotable.
             if (allocation.getUsers().isEmpty()) {
                 matcher.reachabilityGraph.put(allocation, new HashSet<>());
@@ -80,7 +80,7 @@ public class MemToReg implements FunctionProcessor {
 
         // Compute replacement of allocation sites:
         for (final Map.Entry<RegWriter, Promotable> entry : promotableObjects.entrySet()) {
-            final Alloc alloc = (Alloc) entry.getKey();
+            final MemAlloc alloc = (MemAlloc) entry.getKey();
             final List<Event> replacement = alloc.doesZeroOutMemory() ?
                     entry.getValue().replacingRegisters.values().stream()
                             .map(reg -> (Event) EventFactory.newLocal(reg, expressions.makeGeneralZero(reg.getType())))
@@ -119,7 +119,7 @@ public class MemToReg implements FunctionProcessor {
 
     private Map<RegWriter, Promotable> collectPromotableObjects(Function function, Matcher matcher) {
         final Map<RegWriter, Promotable> promotableObjects = new HashMap<>();
-        for (final Alloc allocation : function.getEvents(Alloc.class)) {
+        for (final MemAlloc allocation : function.getEvents(MemAlloc.class)) {
             if (!matcher.reachabilityGraph.containsKey(allocation)) {
                 continue;
             }
@@ -138,7 +138,7 @@ public class MemToReg implements FunctionProcessor {
         return promotableObjects;
     }
 
-    private Register newRegister(Alloc allocation, Field field) {
+    private Register newRegister(MemAlloc allocation, Field field) {
         return allocation.getFunction().newUniqueRegister("__memToReg", field.type);
     }
 

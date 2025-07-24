@@ -857,6 +857,46 @@ public class NativeRelationAnalysis implements RelationAnalysis {
         }
 
         @Override
+        public MutableKnowledge visitAllocPtr(AllocPtr allocPtr) {
+            MutableEventGraph may = new MapEventGraph();
+            MutableEventGraph must = new MapEventGraph();
+            List<Event> allocs = program.getThreadEventsWithAllTags(ALLOC);
+            List<MemFree> frees = program.getThreadEvents(MemFree.class);
+            List<? extends Event> allocAndFrees = Stream.concat(allocs.stream(), frees.stream()).toList();
+            for (Event e1 : allocAndFrees) {
+                for (MemFree e2 : frees) {
+                    if (alias.mayAlias(e1, e2)) {
+                        may.add(e1, e2);
+                        if (alias.mustAlias(e1, e2)) {
+                            must.add(e1, e2);
+                        }
+                    }
+                }
+            }
+            return new MutableKnowledge(may, must);
+        }
+
+        @Override
+        public MutableKnowledge visitAllocMem(AllocMem allocMem) {
+            MutableEventGraph may = new MapEventGraph();
+            MutableEventGraph must = new MapEventGraph();
+            List<MemoryCoreEvent> memEvents = program.getThreadEvents(MemoryCoreEvent.class);
+            List<Event> allocs = program.getThreadEventsWithAllTags(ALLOC);
+            for (Event e1 : allocs) {
+                for (MemoryCoreEvent e2 : memEvents) {
+                    if (e2 instanceof Init) { continue; }
+                    if (alias.mayObjectAlias(e1, e2)) {
+                        may.add(e1, e2);
+                        if (alias.mustObjectAlias(e1, e2)) {
+                            must.add(e1, e2);
+                        }
+                    }
+                }
+            }
+            return new MutableKnowledge(may, must);
+        }
+
+        @Override
         public MutableKnowledge visitReadFrom(ReadFrom rf) {
             logger.trace("Computing knowledge about read-from");
             final BranchEquivalence eq = analysisContext.requires(BranchEquivalence.class);

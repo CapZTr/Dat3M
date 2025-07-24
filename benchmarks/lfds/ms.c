@@ -33,5 +33,7 @@ int main()
     int r = dequeue();
     assert(r == EMPTY);
 
+    free_all_retired();
+
     return 0;
 }
